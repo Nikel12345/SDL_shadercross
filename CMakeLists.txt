@@ -148,7 +148,10 @@ else()
 		endif()
 	else()
 		enable_language(CXX)
-		if(NOT TARGET spirv_cross_c)
+		# ENGINE-FORK: SPIRV-Cross added by the parent project with add_subdirectory defines
+		# the target as spirv-cross-c, not spirv_cross_c, so the check alone would re-run
+		# find_package and fail.
+		if(NOT TARGET spirv_cross_c AND NOT TARGET spirv-cross-c)
 			find_package(spirv_cross_core QUIET)
 			find_package(spirv_cross_glsl QUIET)
 			find_package(spirv_cross_hlsl QUIET)
