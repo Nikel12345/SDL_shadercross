@@ -590,6 +590,87 @@ static void *SDL_ShaderCross_INTERNAL_CompileUsingDXC(
 #endif /* SDL_SHADERCROSS_DXC */
 }
 
+/* ENGINE-FORK: DXC version query, see SDL_ShaderCross_GetDXCVersion in the header. */
+#ifdef SDL_SHADERCROSS_DXC
+static Uint8 IID_IDxcVersionInfo2[] = { /* fb6904c4-42f0-4b62-9c46-983af7da7c83 */
+    0xc4, 0x04, 0x69, 0xfb,
+    0xf0, 0x42,
+    0x62, 0x4b,
+    0x9c, 0x46, 0x98, 0x3a, 0xf7, 0xda, 0x7c, 0x83
+};
+typedef struct IDxcVersionInfo2 IDxcVersionInfo2;
+typedef struct IDxcVersionInfo2Vtbl
+{
+    HRESULT(__stdcall *QueryInterface)(IDxcVersionInfo2 *This, REFIID riid, void **ppvObject);
+    ULONG(__stdcall *AddRef)(IDxcVersionInfo2 *This);
+    ULONG(__stdcall *Release)(IDxcVersionInfo2 *This);
+    HRESULT(__stdcall *GetVersion)(IDxcVersionInfo2 *This, Uint32 *pMajor, Uint32 *pMinor);
+    HRESULT(__stdcall *GetFlags)(IDxcVersionInfo2 *This, Uint32 *pFlags);
+    HRESULT(__stdcall *GetCommitInfo)(IDxcVersionInfo2 *This, Uint32 *pCommitCount, char **pCommitHash);
+} IDxcVersionInfo2Vtbl;
+struct IDxcVersionInfo2
+{
+    const IDxcVersionInfo2Vtbl *lpVtbl;
+};
+/* The commit hash is CoTaskMemAlloc'd by DXC; off Windows DXC maps that onto malloc/free. */
+#if defined(_WIN32)
+extern void __stdcall CoTaskMemFree(void *pv);
+#define SDL_SHADERCROSS_DXC_FREE(p) CoTaskMemFree(p)
+#else
+#include <stdlib.h>
+#define SDL_SHADERCROSS_DXC_FREE(p) free(p)
+#endif
+#endif /* SDL_SHADERCROSS_DXC */
+
+bool SDL_ShaderCross_GetDXCVersion(Uint32 *major, Uint32 *minor, Uint32 *commit_count)
+{
+#ifdef SDL_SHADERCROSS_DXC
+    IDxcCompiler3 *dxcInstance = NULL;
+    IDxcVersionInfo2 *versionInfo = NULL;
+    Uint32 maj = 0, min = 0, commits = 0;
+    char *hash = NULL;
+    HRESULT ret;
+
+    DxcCreateInstance(&CLSID_DxcCompiler, IID_IDxcCompiler3, (void **)&dxcInstance);
+    if (dxcInstance == NULL) {
+        return SDL_SetError("%s", "Could not create DXC instance!");
+    }
+    ret = dxcInstance->lpVtbl->QueryInterface(dxcInstance, IID_IDxcVersionInfo2, (void **)&versionInfo);
+    dxcInstance->lpVtbl->Release(dxcInstance);
+    if (ret < 0 || versionInfo == NULL) {
+        return SDL_SetError("%s", "DXC does not expose IDxcVersionInfo2");
+    }
+
+    ret = versionInfo->lpVtbl->GetVersion(versionInfo, &maj, &min);
+    if (ret >= 0) {
+        ret = versionInfo->lpVtbl->GetCommitInfo(versionInfo, &commits, &hash);
+    }
+    if (hash != NULL) {
+        SDL_SHADERCROSS_DXC_FREE(hash);
+    }
+    versionInfo->lpVtbl->Release(versionInfo);
+    if (ret < 0) {
+        return SDL_SetError("DXC version query failed: %X", ret);
+    }
+
+    if (major) {
+        *major = maj;
+    }
+    if (minor) {
+        *minor = min;
+    }
+    if (commit_count) {
+        *commit_count = commits;
+    }
+    return true;
+#else
+    (void)major;
+    (void)minor;
+    (void)commit_count;
+    return SDL_SetError("%s", "Shadercross was not built with DXC support!");
+#endif /* SDL_SHADERCROSS_DXC */
+}
+
 void *SDL_ShaderCross_CompileDXILFromHLSL(
     const SDL_ShaderCross_HLSL_Info *info,
     size_t *size)

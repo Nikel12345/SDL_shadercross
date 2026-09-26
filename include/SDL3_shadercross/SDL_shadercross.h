@@ -288,6 +288,22 @@ extern SDL_DECLSPEC SDL_ShaderCross_ComputePipelineMetadata * SDLCALL SDL_Shader
 extern SDL_DECLSPEC SDL_GPUShaderFormat SDLCALL SDL_ShaderCross_GetHLSLShaderFormats(void);
 
 /**
+ * ENGINE-FORK: get the version of the DXC library that compiles HLSL.
+ *
+ * The version is taken from the loaded dxcompiler at runtime, so it identifies
+ * the compiler that actually produced the bytecode (e.g. for shader cache keys).
+ *
+ * \param major filled with the major version.
+ * \param minor filled with the minor version.
+ * \param commit_count filled with the number of commits of the DXC build;
+ *                     distinguishes releases sharing major.minor.
+ * \returns true on success, false if DXC is unavailable; call SDL_GetError() for more information.
+ *
+ * \threadsafety It is safe to call this function from any thread.
+ */
+extern SDL_DECLSPEC bool SDLCALL SDL_ShaderCross_GetDXCVersion(Uint32 *major, Uint32 *minor, Uint32 *commit_count);
+
+/**
  * Compile to DXBC bytecode from HLSL code via a SPIRV-Cross round trip.
  *
  * You must SDL_free the returned buffer once you are done with it.
