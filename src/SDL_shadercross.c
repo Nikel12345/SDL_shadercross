@@ -333,6 +333,7 @@ static void *SDL_ShaderCross_INTERNAL_CompileUsingDXC(
     size_t includeDirLength = 0;
     wchar_t *includeDirUtf16 = NULL;
     wchar_t *nameUtf16 = NULL;
+    wchar_t *targetEnvUtf16 = NULL; /* ENGINE-FORK */
     wchar_t **defineStringsUtf16 = NULL;
     size_t numDefineStrings = 0;
     HRESULT ret;
@@ -400,7 +401,8 @@ static void *SDL_ShaderCross_INTERNAL_CompileUsingDXC(
         defineStringsUtf16[i] = (wchar_t *)SDL_iconv_string("WCHAR_T", "UTF-8", defineString, MAX_DEFINE_STRING_LENGTH);
     }
 
-    LPCWSTR *args = SDL_malloc(sizeof(LPCWSTR) * (numDefineStrings + 13));
+    /* ENGINE-FORK: +1 slot for -fspv-target-env */
+    LPCWSTR *args = SDL_malloc(sizeof(LPCWSTR) * (numDefineStrings + 14));
     Uint32 argCount = 0;
 
     for (Uint32 i = 0; i < numDefineStrings; i += 1) {
@@ -453,6 +455,20 @@ static void *SDL_ShaderCross_INTERNAL_CompileUsingDXC(
         }
 
         args[argCount++] = (LPCWSTR)L"-fspv-preserve-interface";
+
+        /* ENGINE-FORK: SPIR-V target environment; without it DXC emits SPIR-V 1.0, which
+         * rejects wave intrinsics (GroupNonUniform needs SPIR-V 1.3 / Vulkan 1.1). */
+        const char *targetEnv = SDL_GetStringProperty(info->props, SDL_SHADERCROSS_PROP_SPIRV_TARGET_ENV_STRING, NULL);
+        if (targetEnv != NULL) {
+            char *targetEnvArg = NULL;
+            if (SDL_asprintf(&targetEnvArg, "-fspv-target-env=%s", targetEnv) >= 0) {
+                targetEnvUtf16 = (wchar_t *)SDL_iconv_string("WCHAR_T", "UTF-8", targetEnvArg, SDL_strlen(targetEnvArg) + 1);
+                SDL_free(targetEnvArg);
+            }
+            if (targetEnvUtf16 != NULL) {
+                args[argCount++] = targetEnvUtf16;
+            }
+        }
     }
 
     if (SDL_GetBooleanProperty(info->props, SDL_SHADERCROSS_PROP_SHADER_DEBUG_ENABLE_BOOLEAN, false)) {
@@ -497,6 +513,9 @@ static void *SDL_ShaderCross_INTERNAL_CompileUsingDXC(
     }
     if (nameUtf16 != NULL) {
         SDL_free(nameUtf16);
+    }
+    if (targetEnvUtf16 != NULL) { /* ENGINE-FORK */
+        SDL_free(targetEnvUtf16);
     }
 
     if (ret < 0) {
